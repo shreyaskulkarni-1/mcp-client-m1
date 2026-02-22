@@ -1,7 +1,7 @@
 #~/bin/bash
 
 # First install dependencies, then run the app
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 python3 client_query.py &
 python3 gradio_interface.py
 
