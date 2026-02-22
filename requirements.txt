@@ -1,0 +1,6 @@
+gradio
+mcp
+python-dotenv
+openai
+aiohttp
+requests
