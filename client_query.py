@@ -207,7 +207,7 @@ if __name__ == "__main__":
         runner = web.AppRunner(app)
         await runner.setup()
 
-        site = web.TCPSite(runner, 'localhost', 8000)
+        site = web.TCPSite(runner, '0.0.0.0', 8000)
         await site.start()
 
         print("\n Server running on http://localhost:8000")

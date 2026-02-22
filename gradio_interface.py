@@ -119,7 +119,7 @@ def create_gradio_app(api_url: str = "http://localhost:8000") -> gr.Blocks:
 if __name__ == "__main__":
     app = create_gradio_app()
     app.launch(
-        server_name="localhost",
+        server_name="0.0.0.0",
         server_port=7860,
         share=False,
         show_error=True
