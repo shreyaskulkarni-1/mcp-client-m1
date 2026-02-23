@@ -7,7 +7,7 @@ import pdb
 import gradio as gr
 import requests
 import json
-from typing import List, Tuple
+from typing import List, Dict
 
 
 class GradioChatInterface:
@@ -17,20 +17,20 @@ class GradioChatInterface:
         self.api_url = api_url
         self.chat_history = []
 
-    def send_message(self, message: str, history: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    def send_message(self, message: str, history: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """
-        Send message to Django backend and get response
+        Send message to backend and get response
 
         Args:
             message: User message
-            history: Chat history from Gradio
+            history: Chat history from Gradio (list of message dicts)
 
         Returns:
             Updated chat history
         """
         try:
             # Add user message to history
-            history.append((message, None))
+            history.append({"role": "user", "content": message})
 
             # Send to backend
             # pdb.set_trace()
@@ -46,15 +46,15 @@ class GradioChatInterface:
             else:
                 bot_response = f"Error: {response.status_code} - {response.text}"
 
-            # Update last message with bot response
-            history[-1] = (message, bot_response)
+            # Add bot response to history
+            history.append({"role": "assistant", "content": bot_response})
 
         except requests.exceptions.ConnectionError as ex:
-            history[-1] = (message, "Error: Cannot connect to server. Make sure Django is running on http://localhost:8000")
+            history.append({"role": "assistant", "content": "Error: Cannot connect to server. Make sure the backend is running on http://localhost:8000"})
         except requests.exceptions.Timeout:
-            history[-1] = (message, "Error: Request timed out. The operation took too long.")
+            history.append({"role": "assistant", "content": "Error: Request timed out. The operation took too long."})
         except Exception as e:
-            history[-1] = (message, f"Error: {str(e)}")
+            history.append({"role": "assistant", "content": f"Error: {str(e)}"})
 
         return history
 
