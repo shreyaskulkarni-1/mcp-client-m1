@@ -1,6 +1,6 @@
 # This dockerfile will build a container by cloning the repository and installing the dependencies.
-# We will use ollama container as the base image, so if user doesn't have OPENAI_API_KEY, they can still use the container with ollama for local LLMs.
-FROM ollama/ollama:latest
+# We will use python 3.12 image.
+FROM python:3.12-slim
 
 # Install git and other dependencies
 RUN apt-get update && apt-get install -y git python3 python3-pip && \
@@ -23,11 +23,7 @@ EXPOSE 7860 8000
 
 # Create an entrypoint script that starts ollama and pulls the model
 RUN echo '#!/bin/bash\n\
-ollama serve &\n\
-OLLAMA_PID=$!\n\
-sleep 5\n\
-ollama pull llama3.2:3b\n\
-exec "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
+bash ./start.sh\n\' > /entrypoint.sh && chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["./start.sh"]
