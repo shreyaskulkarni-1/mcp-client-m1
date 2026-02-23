@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv('.env')
-MODEL_NAME = os.getenv("MODEL_NAME", "llama")
+MODEL_NAME = os.getenv("MODEL_NAME", "llama3.2:3b")
 
 # Load mcp server details from server.json file instead of hardcoding
 server_params = None
@@ -65,10 +65,30 @@ async def run(query, session):
             {"role": "user", "content": query}
         ]
 
-        if MODEL_NAME == "llama":
+        if MODEL_NAME == "llama3.2:3b":
+            explain_str = "You're a tool selector. Given the user's query and the list of available tools, your job is to determine which tool(s) should be called to best answer the user's question. Consider the capabilities of each tool and how they can be used to gather information or perform actions that will help you respond to the user's query effectively."
+            explain_str += " Here are the available tools:\n"
+            explain_str += json.dumps(openai_tools)
+            explain_str += "\n"
+            explain_str += "Here is the user's query: "
+            explain_str += query
+            explain_str += """
+            Return the optimal tool choice in the following JSON format:
+            {
+                "tool_name": "name-of-tool-to-call",
+                "arguments": {
+                    "arg1": "value1",
+                    "arg2": "value2"
+                }
+            }
+            """
+            messages = [
+                {"role": "user", "content": explain_str}
+            ]
+            print("Message::", messages[0]['content'])
             client = OpenAI(
                     base_url="http://localhost:11434/v1",  # Change to your local LLM server URL
-                    api_key="not-used",  # API key is not used for local models, but OpenAI client requires it
+                    api_key="ollama",  # API key is not used for local models, but OpenAI client requires it
             )
         else:
             client = OpenAI()
