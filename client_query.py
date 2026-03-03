@@ -151,7 +151,21 @@ async def run(query, session, conversation_history=None):
                 messages=messages + [
                     {
                         "role": "user",
-                        "content": "Format the above tool results as clear, well-structured markdown. Include headers, bullet points, tables, and code blocks where appropriate. Make it easy to read. Also, do not provide any raw JSON payload from response since it is not pretty."
+                        "content": """Present the data from the tool results in clean, readable markdown format. 
+
+Rules:
+- Show ONLY the actual data/information, not JSON structures
+- Use headers, bullet points, and tables to organize the information
+- Do NOT include programming instructions, code snippets, or implementation details
+- Do NOT explain how to render or process the data
+- Do NOT show raw JSON payloads
+- Just present the facts and information in a human-readable format
+
+Example: If showing VDB details, format like:
+## VDB Name
+- **Status**: Running
+- **Size**: 50GB
+- **Created**: 2024-01-15"""
                     }
                 ],
             )
