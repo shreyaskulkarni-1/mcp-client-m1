@@ -45,7 +45,21 @@ server_params = StdioServerParameters(
     env=server_config['servers']['delphix-dct']['env'],
 )
 
-async def run(query, session):
+async def run(query, session, conversation_history=None):
+    """
+    Process a query with the MCP session and maintain conversation history.
+
+    Args:
+        query: The user's query
+        session: The MCP session
+        conversation_history: List of previous messages in the conversation
+
+    Returns:
+        The assistant's response
+    """
+    if conversation_history is None:
+        conversation_history = []
+
     try:
         tools_result = await session.list_tools()
         openai_tools = [
@@ -59,29 +73,38 @@ async def run(query, session):
             }
             for tool in tools_result.tools
         ]
+        print("Available tools from MCP server:", json.dumps(openai_tools, indent=2))
 
-        # Make OpenAI LLM call
-        messages = [
-            {"role": "user", "content": query}
-        ]
+        # Build messages array with conversation history
+        messages = conversation_history.copy()  # Start with existing history
+        messages.append({"role": "user", "content": query})  # Add new user query
 
         if MODEL_NAME == "llama3.2:3b":
-            explain_str = "You're a tool selector. Given the user's query and the list of available tools, your job is to determine which tool(s) should be called to best answer the user's question. Consider the capabilities of each tool and how they can be used to gather information or perform actions that will help you respond to the user's query effectively."
-            explain_str += " Here are the available tools:\n"
+            # For Ollama, we need to construct a special prompt
+            explain_str = "You're a tool selector. Given the user's query and the list of available tools, your job is to determine which tool should be called to best answer the user's question. Consider the capabilities of each tool and how they can be used to gather information or perform actions that will help you respond to the user's query effectively."
+
+            # Include conversation context for Ollama
+            if len(conversation_history) > 0:
+                explain_str += "\n\nPrevious conversation context:\n"
+                for msg in conversation_history[-6:]:  # Include last 3 exchanges (6 messages)
+                    explain_str += f"{msg['role']}: {msg['content']}\n"
+
+            explain_str += "\nHere is the current user's query: "
+            explain_str += query+"\n"
+            explain_str += """
+                        Go through the function description and arguments to return the optimal tool choice in the following JSON format:
+                        {
+                            "tool_name": "name-of-tool-to-call",
+                            "arguments": {
+                                "arg_name_1": "value1",
+                                "arg_name_2": "value2"
+                            }
+                        }
+                        """
+            explain_str += "Here are the available tools:\n"
             explain_str += json.dumps(openai_tools)
             explain_str += "\n"
-            explain_str += "Here is the user's query: "
-            explain_str += query
-            explain_str += """
-            Return the optimal tool choice in the following JSON format:
-            {
-                "tool_name": "name-of-tool-to-call",
-                "arguments": {
-                    "arg1": "value1",
-                    "arg2": "value2"
-                }
-            }
-            """
+
             messages = [
                 {"role": "user", "content": explain_str}
             ]
@@ -92,6 +115,7 @@ async def run(query, session):
             )
         else:
             client = OpenAI()
+
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=messages,
@@ -99,11 +123,10 @@ async def run(query, session):
             tool_choice="auto",
         )
 
-
         messages.append(response.choices[0].message)
-        # pdb.set_trace()
+
         # Handle any tool calls
-        if response.choices[0].message.tool_calls:
+        if response.choices[0].message.tool_calls and MODEL_NAME != "llama3.2:3b":
             for tool_execution in response.choices[0].message.tool_calls:
                 # Execute tool call
                 print("Arguments for tool call:", tool_execution.function.arguments)
@@ -111,7 +134,6 @@ async def run(query, session):
                     tool_execution.function.name,
                     arguments=json.loads(tool_execution.function.arguments),
                 )
-                # print("Tool execution result:", result.content[0].text)
 
                 # Add tool response to conversation
                 messages.append(
@@ -133,9 +155,19 @@ async def run(query, session):
                     }
                 ],
             )
-            return format_response.choices[0].message.content
+            final_response = format_response.choices[0].message.content
         else:
-            return response.choices[0].message.content
+            final_response = response.choices[0].message.content
+
+        # Update conversation history with the new exchange
+        conversation_history.append({"role": "user", "content": query})
+        conversation_history.append({"role": "assistant", "content": final_response})
+
+        # Limit conversation history to last 20 messages (10 exchanges) to avoid token limits
+        if len(conversation_history) > 20:
+            conversation_history[:] = conversation_history[-20:]
+
+        return final_response
 
     except Exception as e:
         print("An error occurred:")
@@ -146,12 +178,16 @@ if __name__ == "__main__":
 
     # Global session storage
     mcp_session = None
+    # Global conversation history (stores conversations by session_id)
+    conversation_histories = {}
 
     async def handle_query(request):
         """Handle incoming HTTP POST requests with queries"""
         try:
             data = await request.json()
             query = data.get('query') or data.get('message')
+            session_id = data.get('session_id', 'default')  # Support multiple conversation sessions
+            clear_history = data.get('clear_history', False)
 
             if not query:
                 return web.json_response(
@@ -159,14 +195,24 @@ if __name__ == "__main__":
                     status=400
                 )
 
-            print(f"\n Received query: {query}")
+            # Clear history if requested
+            if clear_history:
+                conversation_histories[session_id] = []
+                return web.json_response({'response': 'Conversation history cleared', 'session_id': session_id})
 
-            # Process the query using the MCP session
-            result = await run(query, mcp_session)
+            # Initialize conversation history for this session if not exists
+            if session_id not in conversation_histories:
+                conversation_histories[session_id] = []
+
+            print(f"\n Received query (session: {session_id}): {query}")
+            print(f" History length: {len(conversation_histories[session_id])} messages")
+
+            # Process the query using the MCP session with conversation history
+            result = await run(query, mcp_session, conversation_histories[session_id])
 
             print(f" Response: {result}\n")
 
-            return web.json_response({'response': result})
+            return web.json_response({'response': result, 'session_id': session_id})
 
         except json.JSONDecodeError:
             return web.json_response({'error': 'Invalid JSON'}, status=400)

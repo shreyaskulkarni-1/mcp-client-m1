@@ -16,6 +16,7 @@ class GradioChatInterface:
     def __init__(self, api_url: str = "http://localhost:8000"):
         self.api_url = api_url
         self.chat_history = []
+        self.session_id = "default"  # Each user gets a session ID
 
     def send_message(self, message: str, history: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """
@@ -32,11 +33,13 @@ class GradioChatInterface:
             # Add user message to history
             history.append({"role": "user", "content": message})
 
-            # Send to backend
-            # pdb.set_trace()
+            # Send to backend with session_id
             response = requests.post(
                 f"{self.api_url}/query",
-                json={"query": message},
+                json={
+                    "query": message,
+                    "session_id": self.session_id
+                },
                 timeout=300  # 5 minute timeout for long-running operations
             )
 
@@ -58,11 +61,32 @@ class GradioChatInterface:
 
         return history
 
+    def clear_history(self, history: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """Clear conversation history on both client and server"""
+        try:
+            # Clear server-side history
+            response = requests.post(
+                f"{self.api_url}/query",
+                json={
+                    "query": "",
+                    "session_id": self.session_id,
+                    "clear_history": True
+                },
+                timeout=10
+            )
+            print("History cleared on server")
+        except Exception as e:
+            print(f"Error clearing server history: {e}")
+
+        # Clear client-side history
+        return []
+
     def create_interface(self) -> gr.Blocks:
         """Create Gradio interface"""
         with gr.Blocks(title="MCP Chat Client") as interface:
             gr.Markdown("""
             # MCP Chat Client
+            Chat with your MCP server. Conversation history is maintained automatically.
             """)
 
             with gr.Group():
@@ -79,7 +103,9 @@ class GradioChatInterface:
                         lines=2,
                         scale=4
                     )
-                    send_btn = gr.Button("Send", scale=1, size="lg")
+                    with gr.Column(scale=1):
+                        send_btn = gr.Button("Send", size="lg")
+                        clear_btn = gr.Button("Clear History", size="sm", variant="secondary")
 
                 send_btn.click(
                     self.send_message,
@@ -100,8 +126,18 @@ class GradioChatInterface:
                     outputs=message_input
                 )
 
+                # Clear history button
+                clear_btn.click(
+                    self.clear_history,
+                    inputs=[chatbot],
+                    outputs=chatbot
+                )
+
             gr.Markdown("""
             ### Tips:
+            - **Conversation history is maintained** - You can ask follow-up questions
+            - Example: "List VDBs" → "Show me more details about the first one"
+            - Click "Clear History" to start a new conversation
             - Be specific with your queries to help the LLM select the right tool
             - Tool execution may take time depending on the operation
             - Check the server logs for debugging information
