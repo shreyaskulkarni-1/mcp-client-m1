@@ -151,7 +151,7 @@ async def run(query, session, conversation_history=None):
                 messages=messages + [
                     {
                         "role": "user",
-                        "content": "Format the above tool results as clear, well-structured markdown. Include headers, bullet points, tables, and code blocks where appropriate. Make it easy to read."
+                        "content": "Format the above tool results as clear, well-structured markdown. Include headers, bullet points, tables, and code blocks where appropriate. Make it easy to read. Also, do not provide any raw JSON payload from response since it is not pretty."
                     }
                 ],
             )
